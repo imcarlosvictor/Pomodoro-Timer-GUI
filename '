@@ -1,0 +1,207 @@
+import sys
+import random
+import time
+import datetime
+import threading
+from pynput.keyboard import Key, Listener
+from PySide6 import QtCore, QtWidgets, QtGui
+
+class MyWidget(QtWidgets.QWidget):
+    def __init__(self):
+        super().__init__()
+
+        # --------------------------- Window ---------------------------
+        self.setWindowTitle('Pomo Timer')
+        self.setFixedSize(950,350)
+        self.setStyleSheet("background: #111111;color: #e1e1e1;font-weight:bold;border-style:none;")
+
+        # --------------------------- Widgets ---------------------------
+        # Hours
+        self.hour_field = QtWidgets.QLineEdit('00')
+        self.hour_field.setAlignment(QtCore.Qt.AlignCenter)
+        self.hour_field.setFont(QtGui.QFont('Roboto', 120))
+        # Minutes
+        self.minute_field = QtWidgets.QLineEdit('00')
+        self.minute_field.setAlignment(QtCore.Qt.AlignCenter)
+        self.minute_field.setFont(QtGui.QFont('Roboto', 120))
+        # Seconds
+        self.second_field = QtWidgets.QLineEdit('00')
+        self.second_field.setAlignment(QtCore.Qt.AlignCenter)
+        self.second_field.setFont(QtGui.QFont('Roboto', 120))
+        # Colons
+        self.separator1 = QtWidgets.QLabel(':')
+        self.separator1.setAlignment(QtCore.Qt.AlignCenter)
+        self.separator1.setFont(QtGui.QFont('Roboto', 120))
+        self.separator2 = QtWidgets.QLabel(':')
+        self.separator2.setAlignment(QtCore.Qt.AlignCenter)
+        self.separator2.setFont(QtGui.QFont('Roboto', 120))
+        # Options
+        self.pomo_25_5 = QtWidgets.QPushButton('25 | 5')
+        self.pomo_25_5.setFixedHeight(55)
+        self.pomo_25_5.setStyleSheet('background:#295299;color:#e1e1e1;font-size:28px;text-transform:uppercase;')
+        self.pomo_45_10 = QtWidgets.QPushButton('45 | 10')
+        self.pomo_45_10.setFixedHeight(55)
+        self.pomo_45_10.setStyleSheet('background:#295299;color:#e1e1e1;font-size:28px;text-transform:uppercase;')
+        self.pomo_60_15 = QtWidgets.QPushButton('60 | 15')
+        self.pomo_60_15.setFixedHeight(55)
+        self.pomo_60_15.setStyleSheet('background:#295299;color:#e1e1e1;font-size:28px;text-transform:uppercase;')
+        # Label
+        self.tracker = QtWidgets.QLabel('O-O-O-O-O')
+        self.tracker.setStyleSheet('font-size:20px;')
+        self.tracker.setAlignment(QtCore.Qt.AlignCenter)
+        # Button
+        self.start_button = QtWidgets.QPushButton("Start")
+        self.start_button.setStyleSheet('background: green;color: #111111;font-size:28px;text-transform:uppercase;')
+        self.start_button.setFixedHeight(55)
+        # Button
+        self.stop_button = QtWidgets.QPushButton("Stop")
+        self.stop_button.setStyleSheet('background: red;color: #111111;font-size:28px;text-transform:uppercase;')
+        self.stop_button.setFixedHeight(55)
+
+        # --------------------------- Timer Settings ---------------------------
+        self.timer_interval = QtCore.QTimer()
+        # Pomodoro Timer
+        self.work_hour = 0
+        self.work_minute = 0
+        self.work_second = 0
+        self.work_timer_active = False
+        # Break Timer
+        self.break_hour = 0
+        self.break_minute = 0
+        self.break_second = 0
+        self.break_timer_active = False
+        # Set timer
+        self.time_left = 0
+
+        # --------------------------- Layout ---------------------------
+        self.layout = QtWidgets.QGridLayout(self)
+        # Add time
+        self.layout.addWidget(self.hour_field, 1, 0, 1, 1)
+        self.layout.addWidget(self.separator1, 1, 1, 1, 1)
+        self.layout.addWidget(self.minute_field, 1, 2, 1, 1)
+        self.layout.addWidget(self.separator2, 1, 3, 1, 1)
+        self.layout.addWidget(self.second_field, 1, 4, 1, 1)
+        # Add timer options
+        self.layout.addWidget(self.pomo_25_5, 2, 0, 2, 1)
+        self.layout.addWidget(self.pomo_45_10, 2, 1, 2, 2)
+        self.layout.addWidget(self.pomo_60_15, 2, 3, 2, 2)
+        # Tracker
+        self.layout.addWidget(self.tracker, 4, 0, 2, 1)
+        # Add start / stop button
+        self.layout.addWidget(self.start_button, 4, 1, 3, 2)
+        self.layout.addWidget(self.stop_button, 4, 3, 3, 2)
+
+        # --------------------------- Connect ---------------------------
+        self.start_button.clicked.connect(self.startCount)
+        self.stop_button.clicked.connect(self.stopCount)
+        self.pomo_25_5.clicked.connect(lambda: self.presetTimer(0,25,0))
+        self.pomo_45_10.clicked.connect(lambda: self.presetTimer(0,45,0))
+        self.pomo_60_15.clicked.connect(lambda: self.presetTimer(1,0,0))
+
+
+    @QtCore.Slot()
+    def presetTimer(self, hour=0, minute=0, second=0):
+        """Updates the UI to display the time in respect to the user's decision."""
+
+        self.hour_field.setText(str(hour))
+        self.minute_field.setText(str(minute))
+        self.second_field.setText(str(second))
+
+    def updateDisplay(self):
+        """Update the text field with the current time."""
+
+        # Calculate time left
+        hour_left = str(self.time_left // 3600)
+        minute_left = str((self.time_left - int(hour_left) * 3600) // 60)
+        second_left = str(self.time_left % 60)
+        # Add an extra 0 for single digits
+        if int(hour_left) < 10:
+            hour_left = '0' + hour_left
+        if int(minute_left) < 10:
+            minute_left = '0' + minute_left
+        if int(second_left) < 10:
+            second_left = '0' + second_left
+        # Update the UI display
+        self.hour_field.setText(hour_left)
+        self.minute_field.setText(minute_left)
+        self.second_field.setText(second_left)
+        print(hour_left + ':' + minute_left + ':' + second_left)
+        print('hello')
+
+    def setTimer(self):
+        """Sets the right time before starting the timer"""
+
+        # Calculate total time
+        # Pomodoro
+        self.work_hour = int(self.hour_field.text())
+        self.work_minute = int(self.minute_field.text())
+        self.work_second = int(self.second_field.text())
+        work_time = self.work_hour * 3600 + self.work_minute * 60 + self.work_second
+        # Break
+        self.break_hour = int(self.hour_field.text())
+        self.break_minute = int(self.minute_field.text())
+        self.break_second = int(self.second_field.text())
+        break_time = self.break_hour * 3600 + self.break_minute * 60 + self.break_second
+
+        return work_time, break_time
+
+    def startCount(self):
+        """
+        Starts the timer for the work phase then takes a 2 second timeout before
+        proceeding to start the break timer
+        """
+
+        # Time settings
+        work_time_total, break_time_total = self.setTimer()
+        self.hour_field.setText('99')
+
+        # -------- WORK --------
+        self.work_timer_active = True
+        self.time_left = work_time_total
+        # Start timer
+        while self.time_left > 0:
+            self.time_left -=1
+            self.updateDisplay()
+            self.timer_interval.start(1000)
+        self.timer_interval.stop()
+        self.work_timer_active = False
+
+        # -------- BREAK --------
+        time.sleep(2)
+        if work_time_total == 1500:
+            self.presetTimer(0,5,0)
+        elif work_time_total == 2700:
+            self.presetTimer(0,10,0)
+        elif work_time_total == 3600:
+            self.presetTimer(0,15,0)
+
+        self.break_timer_active = True
+        self.time_left = break_time_total
+        # Start timer
+        while self.time_left > 0:
+            self.time_left -= 1
+            self.updateDisplay()
+            time.sleep(1)
+        self.break_timer_active = False
+
+        # -------- END --------
+        self.stop()
+
+    def stopCount(self):
+        """Resets the UI."""
+
+        self.timer_active = False
+        self.hour_field.setText(str(self.pomo_hour))
+        self.minute_field.setText(str(self.pomo_minute))
+        self.second_field.setText(str(self.pomo_second))
+        print('Timer stopped')
+
+
+if __name__ == "__main__":
+    app = QtWidgets.QApplication([])
+
+    widget = MyWidget()
+    widget.resize(800, 600)
+    widget.show()
+
+    sys.exit(app.exec())
